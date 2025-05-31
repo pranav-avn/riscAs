@@ -342,6 +342,18 @@ pub fn asm_parser(contents: BufReader<File>) {
                                 eprintln!("Wrong number of operands for S-type: {:?}", tokens);
                             }
                         }
+
+                        InstKind::BType { funct3 } => {
+                            println!("Yet to be implemented! :p"); // instantiated to shut up the compiler :sobs:
+                        }
+
+                        InstKind::UType => {
+                            println!("Yet to be implemented! :p"); // instantiated to shut up the compiler :sobs:
+                        }
+
+                        InstKind::JType => {
+                            println!("Yet to be implemented! :p"); // instantiated to shut up the compiler :sobs:
+                        }
                         _ => {
                             println!("Instruction format not supported yet: {:?}", instr.kind);
                         }
