@@ -182,6 +182,57 @@ fn get_arithmetic_instructions() -> HashMap<&'static str, InstFmt> {
         },
     );
 
+    // B-Type (Branches)
+    map.insert("beq",  InstFmt {
+            opcode: 0b1100011,
+            kind: InstKind::BType { funct3: 0b000 }, 
+        },
+    );
+    map.insert("bne",  InstFmt {
+            opcode: 0b1100011,
+            kind: InstKind::BType { funct3: 0b001 },
+        },
+    );
+    map.insert("blt",  InstFmt {
+            opcode: 0b1100011,
+            kind: InstKind::BType { funct3: 0b100 },
+        },
+    );
+    map.insert("bge",  InstFmt {
+            opcode: 0b1100011,
+            kind: InstKind::BType { funct3: 0b101 },
+        },
+    );
+    map.insert("bltu", InstFmt {
+            opcode: 0b1100011,
+            kind: InstKind::BType { funct3: 0b110 },
+        },
+    );
+    map.insert("bgeu", InstFmt {
+            opcode: 0b1100011,
+            kind: InstKind::BType { funct3: 0b111 },
+        },
+    );
+
+    // U-Type
+    map.insert("lui",   InstFmt {
+            opcode: 0b0110111,
+            kind: InstKind::UType,
+        },
+    );
+    map.insert("auipc", InstFmt {
+            opcode: 0b0010111,
+            kind: InstKind::UType,
+        },
+    );
+
+    // J-Type
+    map.insert("jal", InstFmt {
+            opcode: 0b1101111,
+            kind: InstKind::JType,
+        },
+    );
+
     map
 }
 
