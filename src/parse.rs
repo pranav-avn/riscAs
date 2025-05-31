@@ -165,6 +165,23 @@ fn get_arithmetic_instructions() -> HashMap<&'static str, InstFmt> {
         },
     });
 
+    // S-Type instructions
+    map.insert("sb",InstFmt {
+            opcode: 0b0100011,
+            kind: InstKind::SType { funct3: 0b000 },
+        },
+    );
+    map.insert("sh",InstFmt {
+            opcode: 0b0100011,
+            kind: InstKind::SType { funct3: 0b001 },
+        },
+    );
+    map.insert("sw",InstFmt {
+            opcode: 0b0100011,
+            kind: InstKind::SType { funct3: 0b010 },
+        },
+    );
+
     map
 }
 
@@ -209,6 +226,21 @@ fn reg_to_u8(reg: &str) -> Option<u8> {
     }
 }
 
+fn parse_s_type_operands(rs2_token: &str, offset_base: &str) -> Option<(u8, u8, i32)> {
+    //func to parse base+offset address
+    let rs2 = reg_to_u8(rs2_token)?;
+    let open_paren = offset_base.find('(')?;
+    let close_paren = offset_base.find(')')?;
+
+    let imm_str = &offset_base[..open_paren];
+    let base_reg_str = &offset_base[open_paren + 1..close_paren];
+
+    let imm = imm_str.trim().parse::<i32>().ok()?;
+    let rs1 = reg_to_u8(base_reg_str.trim())?;
+
+    Some((rs1, rs2, imm))
+}
+
 
 fn encode_r_type(opcode: u8, funct3: u8, funct7: u8, rd: u8, rs1: u8, rs2: u8) -> u32 {
     ((funct7 as u32) << 25)
@@ -225,6 +257,19 @@ fn encode_i_type(opcode: u8, funct3: u8, rd: u8, rs1: u8, imm: i32) -> u32 {
         | ((rs1 as u32) << 15)
         | ((funct3 as u32) << 12)
         | ((rd as u32) << 7)
+        | (opcode as u32)
+}
+
+fn encode_s_type(opcode: u8, funct3: u8, rs1: u8, rs2: u8, imm: i32) -> u32 {
+    let imm_u = imm as u32;
+    let imm_4_0 = imm_u & 0b11111;            // bits 4:0
+    let imm_11_5 = (imm_u >> 5) & 0b1111111;  // bits 11:5
+
+    (imm_11_5 << 25)
+        | ((rs2 as u32) << 20)
+        | ((rs1 as u32) << 15)
+        | ((funct3 as u32) << 12)
+        | (imm_4_0 << 7)
         | (opcode as u32)
 }
 
@@ -285,7 +330,18 @@ pub fn asm_parser(contents: BufReader<File>) {
                                 eprintln!("Wrong number of operands for I-type: {:?}", tokens);
                             }
                         }
-
+                        InstKind::SType { funct3 } => {
+                            if tokens.len() == 3 {
+                                if let Some((rs1, rs2, imm)) = parse_s_type_operands(&tokens[1], &tokens[2]) {
+                                    let binary = encode_s_type(instr.opcode, *funct3, rs1, rs2, imm);
+                                    println!("{:032b}", binary);
+                                } else {
+                                    eprintln!("Invalid S-type operands: {:?}", tokens);
+                                }
+                            } else {
+                                eprintln!("Wrong number of operands for S-type: {:?}", tokens);
+                            }
+                        }
                         _ => {
                             println!("Instruction format not supported yet: {:?}", instr.kind);
                         }
