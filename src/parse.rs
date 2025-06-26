@@ -342,7 +342,21 @@ fn encode_b_type(opcode: u8, funct3: u8, rs1: u8, rs2: u8, offset: i32) -> u32 {
         | (opcode as u32)
 }
 
+fn encode_j_type(opcode: u8, rd: u8, offset: i32) -> u32 {
+    let imm = offset as u32;
 
+    let imm_20 = (imm >> 20) & 0x1;
+    let imm_10_1 = (imm >> 1) & 0x3FF;
+    let imm_11 = (imm >> 11) & 0x1;
+    let imm_19_12 = (imm >> 12) & 0xFF;
+
+    (imm_20 << 31)
+        | (imm_19_12 << 12)
+        | (imm_11 << 20)
+        | (imm_10_1 << 21)
+        | ((rd as u32) << 7)
+        | (opcode as u32)
+}
 
 fn resolve_labels_and_collect_instructions(contents: BufReader<File>) -> (HashMap<String, u32>, Vec<(u32, String)>) {
     let mut label_map = HashMap::new();
@@ -444,8 +458,8 @@ pub fn asm_parser(contents: BufReader<File>) {
                         if let (Some(rs1), Some(rs2)) = (rs1, rs2) {
                             if let Some(&target_addr) = label_map.get(label) {
                                 let offset = target_addr as i32 - pc as i32;
-                                let bin = encode_b_type(instr.opcode, *funct3, rs1, rs2, offset);
-                                println!("{:032b}", bin);
+                                let binary = encode_b_type(instr.opcode, *funct3, rs1, rs2, offset);
+                                println!("{:032b}", binary);
                             } else {
                                 eprintln!("Label '{}' not found", label);
                             }
@@ -458,8 +472,31 @@ pub fn asm_parser(contents: BufReader<File>) {
                 }
 
                 InstKind::JType => {
-                    println!("Yet to be implemented! :p"); // instantiated to shut up the compiler :sobs:
+                    if tokens.len() == 3 {
+                        let rd = reg_to_u8(&tokens[1]);
+                        let label = &tokens[2];
+
+                        if let Some(rd) = rd {
+                            if let Some(&target_addr) = label_map.get(label) {
+                                let offset = target_addr as i32 - pc as i32;
+
+                                if offset % 2 != 0 {
+                                    eprintln!("Unaligned offset for label '{}'", label);
+                                } else {
+                                    let binary = encode_j_type(instr.opcode, rd, offset);
+                                    println!("{:032b}", binary);
+                                }
+                            } else {
+                                eprintln!("Unknown label '{}'", label);
+                            }
+                        } else {
+                            eprintln!("Invalid register '{}'", tokens[1]);
+                        }
+                    } else {
+                        eprintln!("J-type format should be: jal rd, label");
+                    }
                 }
+
             }
         } else {
             println!("Unknown mnemonic: {}", mnemonic);
