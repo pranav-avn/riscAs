@@ -6,4 +6,4 @@
 .loop:
     add s0, s0, t0        # add to the result
     addi t0, t0, 1        # increment the counter
-    bge t1, t0, . loop    # loop condition
+    bge t1, t0, .loop    # loop condition

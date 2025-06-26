@@ -17,7 +17,7 @@ struct InstFmt {
 }
 
 
-fn get_arithmetic_instructions() -> HashMap<&'static str, InstFmt> {
+fn get_instruction_map() -> HashMap<&'static str, InstFmt> {
     let mut map = HashMap::new();
 
     // R-type arithmetic instructions (opcode: 0b0110011)
@@ -324,97 +324,145 @@ fn encode_s_type(opcode: u8, funct3: u8, rs1: u8, rs2: u8, imm: i32) -> u32 {
         | (opcode as u32)
 }
 
+fn encode_b_type(opcode: u8, funct3: u8, rs1: u8, rs2: u8, offset: i32) -> u32 {
+    let imm = offset as u32;
 
-pub fn asm_parser(contents: BufReader<File>) {
-    let instr_map = get_arithmetic_instructions();
+    let imm_12   = (imm >> 12) & 0x1;
+    let imm_10_5 = (imm >> 5)  & 0x3F;
+    let imm_4_1  = (imm >> 1)  & 0xF;
+    let imm_11   = (imm >> 11) & 0x1;
+
+    (imm_12 << 31)
+        | (imm_10_5 << 25)
+        | ((rs2 as u32) << 20)
+        | ((rs1 as u32) << 15)
+        | ((funct3 as u32) << 12)
+        | (imm_4_1 << 8)
+        | (imm_11 << 7)
+        | (opcode as u32)
+}
+
+
+
+fn resolve_labels_and_collect_instructions(contents: BufReader<File>) -> (HashMap<String, u32>, Vec<(u32, String)>) {
+    let mut label_map = HashMap::new();
+    let mut instructions = Vec::new();
+    let mut pc = 0u32;
 
     for line_result in contents.lines() {
-        match line_result {
-            Ok(line) => {
-                let trimmed = line.trim_start();
-                if trimmed.starts_with('.') {
-                    continue;
-                }
+        if let Ok(line) = line_result {
+            let trimmed = line.trim();
 
-                let tokens: Vec<String> = trimmed
-                    .split('#').next().unwrap_or("")
-                    .split_whitespace()
-                    .map(|s| s.trim_end_matches(',').to_string())
-                    .collect();
-
-                if tokens.is_empty() {
-                    continue;
-                }
-
-                let mnemonic = tokens[0].as_str();
-
-                if let Some(instr) = instr_map.get(mnemonic) {
-                    match &instr.kind {
-                        InstKind::RType { funct3, funct7 } => {
-                            if tokens.len() == 4 {
-                                let rd = reg_to_u8(&tokens[1]);
-                                let rs1 = reg_to_u8(&tokens[2]);
-                                let rs2 = reg_to_u8(&tokens[3]);
-                                if let (Some(rd), Some(rs1), Some(rs2)) = (rd, rs1, rs2) {
-                                    let binary = encode_r_type(instr.opcode, *funct3, *funct7, rd, rs1, rs2);
-                                    println!("{:032b}", binary);
-                                } else {
-                                    eprintln!("Invalid register in: {:?}", tokens);
-                                }
-                            } else {
-                                eprintln!("Wrong number of operands for R-type: {:?}", tokens);
-                            }
-                        }
-
-                        InstKind::IType { funct3 } => {
-                            if tokens.len() == 4 {
-                                let rd = reg_to_u8(&tokens[1]);
-                                let rs1 = reg_to_u8(&tokens[2]);
-                                let imm = tokens[3].parse::<i32>().ok();
-                                if let (Some(rd), Some(rs1), Some(imm)) = (rd, rs1, imm) {
-                                    let binary = encode_i_type(instr.opcode, *funct3, rd, rs1, imm);
-                                    println!("{:032b}", binary);
-                                } else {
-                                    eprintln!("Invalid operands in I-type: {:?}", tokens);
-                                }
-                            } else {
-                                eprintln!("Wrong number of operands for I-type: {:?}", tokens);
-                            }
-                        }
-                        InstKind::SType { funct3 } => {
-                            if tokens.len() == 3 {
-                                if let Some((rs1, rs2, imm)) = parse_s_type_operands(&tokens[1], &tokens[2]) {
-                                    let binary = encode_s_type(instr.opcode, *funct3, rs1, rs2, imm);
-                                    println!("{:032b}", binary);
-                                } else {
-                                    eprintln!("Invalid S-type operands: {:?}", tokens);
-                                }
-                            } else {
-                                eprintln!("Wrong number of operands for S-type: {:?}", tokens);
-                            }
-                        }
-
-                        InstKind::BType { funct3 } => {
-                            println!("Yet to be implemented! :p"); // instantiated to shut up the compiler :sobs:
-                        }
-
-                        InstKind::UType => {
-                            println!("Yet to be implemented! :p"); // instantiated to shut up the compiler :sobs:
-                        }
-
-                        InstKind::JType => {
-                            println!("Yet to be implemented! :p"); // instantiated to shut up the compiler :sobs:
-                        }
-                        _ => {
-                            println!("Instruction format not supported yet: {:?}", instr.kind);
-                        }
-                    }
-                } else {
-                    println!("Unknown mnemonic: {}", mnemonic);
-                }
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
             }
 
-            Err(e) => eprintln!("Error reading line: {}", e),
+            if trimmed.ends_with(':') {
+                let label = trimmed.trim_end_matches(':').to_string();
+                label_map.insert(label, pc);
+            } else if trimmed.starts_with('.') {
+                continue;
+            } else {
+                instructions.push((pc, trimmed.to_string()));
+                pc += 4;
+            }
+        }
+    }
+
+    (label_map, instructions)
+}
+
+
+pub fn asm_parser(contents: BufReader<File>) {
+    let (label_map, instructions) = resolve_labels_and_collect_instructions(contents);
+
+    for (pc, line) in instructions {
+        let tokens: Vec<String> = line
+            .split('#').next().unwrap_or("")
+            .split_whitespace()
+            .map(|t| t.trim_end_matches(',').to_string())
+            .collect();
+
+        if tokens.is_empty() {
+            continue;
+        }
+
+        let mnemonic = &tokens[0];
+
+        if let Some(instr) = get_instruction_map().get(mnemonic.as_str()) {
+            match &instr.kind {
+                InstKind::RType { funct3, funct7 } => {
+                    if tokens.len() == 4 {
+                        let rd = reg_to_u8(&tokens[1]);
+                        let rs1 = reg_to_u8(&tokens[2]);
+                        let rs2 = reg_to_u8(&tokens[3]);
+                        if let (Some(rd), Some(rs1), Some(rs2)) = (rd, rs1, rs2) {
+                            let binary = encode_r_type(instr.opcode, *funct3, *funct7, rd, rs1, rs2);
+                            println!("{:032b}", binary);
+                        } else {
+                            eprintln!("Invalid register in: {:?}", tokens);
+                        }
+                    } else {
+                        eprintln!("Wrong number of operands for R-type: {:?}", tokens);
+                    }
+                }
+
+                InstKind::IType { funct3 } => {
+                    if tokens.len() == 4 {
+                        let rd = reg_to_u8(&tokens[1]);
+                        let rs1 = reg_to_u8(&tokens[2]);
+                        let imm = tokens[3].parse::<i32>().ok();
+                        if let (Some(rd), Some(rs1), Some(imm)) = (rd, rs1, imm) {
+                            let binary = encode_i_type(instr.opcode, *funct3, rd, rs1, imm);
+                            println!("{:032b}", binary);
+                        } else {
+                            eprintln!("Invalid operands in I-type: {:?}", tokens);
+                        }
+                    } else {
+                        eprintln!("Wrong number of operands for I-type: {:?}", tokens);
+                    }
+                }
+                InstKind::SType { funct3 } => {
+                    if tokens.len() == 3 {
+                        if let Some((rs1, rs2, imm)) = parse_s_type_operands(&tokens[1], &tokens[2]) {
+                            let binary = encode_s_type(instr.opcode, *funct3, rs1, rs2, imm);
+                            println!("{:032b}", binary);
+                        } else {
+                            eprintln!("Invalid S-type operands: {:?}", tokens);
+                        }
+                    } else {
+                        eprintln!("Wrong number of operands for S-type: {:?}", tokens);
+                    }
+                }
+
+                InstKind::BType { funct3 } => {
+                    if tokens.len() == 4 {
+                        let rs1 = reg_to_u8(&tokens[1]);
+                        let rs2 = reg_to_u8(&tokens[2]);
+                        let label = &tokens[3];
+
+                        if let (Some(rs1), Some(rs2)) = (rs1, rs2) {
+                            if let Some(&target_addr) = label_map.get(label) {
+                                let offset = target_addr as i32 - pc as i32;
+                                let bin = encode_b_type(instr.opcode, *funct3, rs1, rs2, offset);
+                                println!("{:032b}", bin);
+                            } else {
+                                eprintln!("Label '{}' not found", label);
+                            }
+                        }
+                    }
+                }
+
+                InstKind::UType => {
+                    println!("Yet to be implemented! :p"); // instantiated to shut up the compiler :sobs:
+                }
+
+                InstKind::JType => {
+                    println!("Yet to be implemented! :p"); // instantiated to shut up the compiler :sobs:
+                }
+            }
+        } else {
+            println!("Unknown mnemonic: {}", mnemonic);
         }
     }
 }
