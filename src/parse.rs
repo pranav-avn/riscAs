@@ -292,7 +292,6 @@ fn parse_s_type_operands(rs2_token: &str, offset_base: &str) -> Option<(u8, u8, 
     Some((rs1, rs2, imm))
 }
 
-
 fn encode_r_type(opcode: u8, funct3: u8, funct7: u8, rd: u8, rs1: u8, rs2: u8) -> u32 {
     ((funct7 as u32) << 25)
         | ((rs2 as u32) << 20)
@@ -356,6 +355,10 @@ fn encode_j_type(opcode: u8, rd: u8, offset: i32) -> u32 {
         | (imm_10_1 << 21)
         | ((rd as u32) << 7)
         | (opcode as u32)
+}
+
+fn encode_u_type(opcode: u8, rd: u8, imm: u32) -> u32 {
+    (imm << 12) | ((rd as u32) << 7) | (opcode as u32)
 }
 
 fn resolve_labels_and_collect_instructions(contents: BufReader<File>) -> (HashMap<String, u32>, Vec<(u32, String)>) {
@@ -436,6 +439,7 @@ pub fn asm_parser(contents: BufReader<File>) {
                         eprintln!("Wrong number of operands for I-type: {:?}", tokens);
                     }
                 }
+
                 InstKind::SType { funct3 } => {
                     if tokens.len() == 3 {
                         if let Some((rs1, rs2, imm)) = parse_s_type_operands(&tokens[1], &tokens[2]) {
@@ -468,7 +472,23 @@ pub fn asm_parser(contents: BufReader<File>) {
                 }
 
                 InstKind::UType => {
-                    println!("Yet to be implemented! :p"); // instantiated to shut up the compiler :sobs:
+                    if tokens.len() == 3 {
+                        let rd = reg_to_u8(&tokens[1]);
+                        let imm = tokens[2].parse::<u32>();
+
+                        if let (Some(rd), Ok(imm)) = (rd, imm) {
+                            if imm > 0xFFFFF {
+                                eprintln!("Immediate too large for U-type: {}", imm);
+                            } else {
+                                let binary = encode_u_type(instr.opcode, rd, imm);
+                                println!("{:032b} // {}", binary, line);
+                            }
+                        } else {
+                            eprintln!("Invalid U-type operands: {:?}", tokens);
+                        }
+                    } else {
+                        eprintln!("U-type format: {} rd, imm", tokens[0]);
+                    }
                 }
 
                 InstKind::JType => {
