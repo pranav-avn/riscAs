@@ -1,22 +1,26 @@
-# RISC-AS
+# risc-As
 ## A simple RISC-V assembler written in Rust. 
 It takes an assembly file as input, parses the instructions and labels, and outputs a binary file containing the machine code.
 
 ### Features ✨
-#### RISC-V Instruction Support: Assembles a subset of RISC-V RV32I instructions, including:
+#### RISC-V Instruction Support: 
+Assembles a subset of RISC-V RV32I instructions, including:
 
-- R-Type: add, sub, sll, slt, sltu, xor, srl, sra, or, and
-- I-Type: addi, slti, sltiu, xori, ori, andi, slli, srli, srai
-- S-Type: sb, sh, sw
-- B-Type: beq, bne, blt, bge, bltu, bgeu
-- U-Type: lui, auipc
-- J-Type: jal
+- R-Type: `add, sub, sll, slt, sltu, xor, srl, sra, or, and`
+- I-Type: `addi, slti, sltiu, xori, ori, andi, slli, srli, srai`
+- S-Type: `sb, sh, sw`
+- B-Type: `beq, bne, blt, bge, bltu, bgeu`
+- U-Type: `lui, auipc`
+- J-Type: `jal`
 
-#### Label Resolution: Supports labels for branches and jumps, automatically calculating offsets.
+#### Label Resolution:
+Supports labels for branches and jumps, automatically calculating offsets.
 
-#### Register Parsing: Handles both ABI names (e.g., ra, sp, t0) and numerical x registers (e.g., x1, x2).
+#### Register Parsing:
+Handles both ABI names (e.g., ra, sp, t0) and numerical x registers (e.g., x1, x2).
 
-#### Binary Output: Generates a .bin file containing the assembled machine code.
+#### Binary Output:
+Generates a .bin file containing the assembled machine code.
 
 ### How to Use 🚀
 #### Prerequisites
@@ -30,7 +34,7 @@ git clone https://github.com/pranav-avn/riscAs
 cd riscAs
 ```
 
-#### Build the project:
+Build the project:
 
 ```shell
 cargo build --release
@@ -50,14 +54,15 @@ To assemble an assembly file, run the compiled executable with the input assembl
 Let's say you have an assembly file named example.asm:
 
 ```asm
-# example.asm
-addi x10, x0, 10   # a0 = 10
-loop:
-addi x10, x10, 1   # a0 = a0 + 1
-blt x10, x11, loop # if a0 < a1, jump to loop
-jal x0, end
-end:
-addi x10, x10, 0
+# test risc-v assembly file
+.main:
+    addi t0, zero, 1      # initialize t0 to 1
+    addi s0, zero, 0      # result (s0) = 0
+    addi t1, zero, 10     # loop end value
+.loop:
+    add s0, s0, t0        # add to the result
+    addi t0, t0, 1        # increment the counter
+    bge t1, t0, .loop    # loop condition
 ```
 
 To assemble it into program.bin, you would run:
@@ -68,7 +73,9 @@ To assemble it into program.bin, you would run:
 
 This will generate a file named program.bin in the current directory.
 
-#### Project Structure 📁
-##### main.rs: The entry point of the assembler, handling file I/O and orchestrating the parsing process.
+### Project Structure 📁
+##### main.rs:
+The entry point of the assembler, handling file I/O and orchestrating the parsing process.
 
-##### parse.rs: Contains the core logic for parsing assembly instructions, encoding them into machine code, and resolving labels.
+##### parse.rs:
+Contains the core logic for parsing assembly instructions, encoding them into machine code, and resolving labels.
