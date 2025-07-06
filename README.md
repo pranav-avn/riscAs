@@ -46,7 +46,7 @@ This will create an executable in the target/release/ directory.
 To assemble an assembly file, run the compiled executable with the input assembly file and the desired output file name:
 
 ```shell
-./target/release/riscv_assembler <input_assembly_file.asm> <output_binary_file_name>
+./target/release/riscAs <input_assembly_file.asm> <output_binary_file_name>
 ```
 
 #### Example:
