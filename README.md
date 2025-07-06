@@ -68,7 +68,7 @@ Let's say you have an assembly file named example.asm:
 To assemble it into program.bin, you would run:
 
 ```shell
-./target/release/riscv_assembler example.asm program
+./target/release/riscAs example.asm program
 ```
 
 This will generate a file named program.bin in the current directory.
