@@ -25,13 +25,15 @@ Rust: Ensure you have Rust and Cargo installed. If not, you can install it from 
 #### Building the Assembler
 Clone the repository:
 
-```git clone https://github.com/pranav-avn/riscAs
+```shell
+git clone https://github.com/pranav-avn/riscAs
 cd riscAs
 ```
 
 #### Build the project:
 
-```cargo build --release
+```shell
+cargo build --release
 ```
 
 This will create an executable in the target/release/ directory.
@@ -39,14 +41,16 @@ This will create an executable in the target/release/ directory.
 #### Running the Assembler
 To assemble an assembly file, run the compiled executable with the input assembly file and the desired output file name:
 
-```./target/release/riscv_assembler <input_assembly_file.asm> <output_binary_file_name>
+```shell
+./target/release/riscv_assembler <input_assembly_file.asm> <output_binary_file_name>
 ```
 
 #### Example:
 
 Let's say you have an assembly file named example.asm:
 
-```# example.asm
+```asm
+# example.asm
 addi x10, x0, 10   # a0 = 10
 loop:
 addi x10, x10, 1   # a0 = a0 + 1
@@ -58,7 +62,8 @@ addi x10, x10, 0
 
 To assemble it into program.bin, you would run:
 
-```./target/release/riscv_assembler example.asm program
+```shell
+./target/release/riscv_assembler example.asm program
 ```
 
 This will generate a file named program.bin in the current directory.
