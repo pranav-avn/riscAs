@@ -9,7 +9,7 @@ enum InstKind{
     JType,
 }
 
-use std::{fs::File, io::BufRead, io::BufReader};
+use std::{fs::File, io::BufRead, io::BufReader, io::Write};
 
 struct InstFmt {
     opcode: u8,
@@ -361,7 +361,7 @@ fn encode_u_type(opcode: u8, rd: u8, imm: u32) -> u32 {
     (imm << 12) | ((rd as u32) << 7) | (opcode as u32)
 }
 
-fn resolve_labels_and_collect_instructions(contents: BufReader<File>) -> (HashMap<String, u32>, Vec<(u32, String)>) {
+fn resolve_labels(contents: BufReader<File>) -> (HashMap<String, u32>, Vec<(u32, String)>) {
     let mut label_map = HashMap::new();
     let mut instructions = Vec::new();
     let mut pc = 0u32;
@@ -390,9 +390,11 @@ fn resolve_labels_and_collect_instructions(contents: BufReader<File>) -> (HashMa
 }
 
 
-pub fn asm_parser(contents: BufReader<File>) {
-    let (label_map, instructions) = resolve_labels_and_collect_instructions(contents);
-
+pub fn asm_parser(contents: BufReader<File>, output_file_name:String) {
+    let (label_map, instructions) = resolve_labels(contents);
+    
+    let mut binary: Vec<u8> = Vec::new();
+    
     for (pc, line) in instructions {
         let tokens: Vec<String> = line
             .split('#').next().unwrap_or("")
@@ -407,20 +409,21 @@ pub fn asm_parser(contents: BufReader<File>) {
         let mnemonic = &tokens[0];
 
         if let Some(instr) = get_instruction_map().get(mnemonic.as_str()) {
-            match &instr.kind {
+            let encoded: Option<u32> = match &instr.kind {
                 InstKind::RType { funct3, funct7 } => {
                     if tokens.len() == 4 {
                         let rd = reg_to_u8(&tokens[1]);
                         let rs1 = reg_to_u8(&tokens[2]);
                         let rs2 = reg_to_u8(&tokens[3]);
                         if let (Some(rd), Some(rs1), Some(rs2)) = (rd, rs1, rs2) {
-                            let binary = encode_r_type(instr.opcode, *funct3, *funct7, rd, rs1, rs2);
-                            println!("{:032b}", binary);
+                            Some(encode_r_type(instr.opcode, *funct3, *funct7, rd, rs1, rs2))
                         } else {
                             eprintln!("Invalid register in: {:?}", tokens);
+                            None
                         }
                     } else {
                         eprintln!("Wrong number of operands for R-type: {:?}", tokens);
+                        None
                     }
                 }
 
@@ -430,26 +433,28 @@ pub fn asm_parser(contents: BufReader<File>) {
                         let rs1 = reg_to_u8(&tokens[2]);
                         let imm = tokens[3].parse::<i32>().ok();
                         if let (Some(rd), Some(rs1), Some(imm)) = (rd, rs1, imm) {
-                            let binary = encode_i_type(instr.opcode, *funct3, rd, rs1, imm);
-                            println!("{:032b}", binary);
+                            Some(encode_i_type(instr.opcode, *funct3, rd, rs1, imm))
                         } else {
                             eprintln!("Invalid operands in I-type: {:?}", tokens);
+                            None
                         }
                     } else {
                         eprintln!("Wrong number of operands for I-type: {:?}", tokens);
+                        None
                     }
                 }
 
                 InstKind::SType { funct3 } => {
                     if tokens.len() == 3 {
                         if let Some((rs1, rs2, imm)) = parse_s_type_operands(&tokens[1], &tokens[2]) {
-                            let binary = encode_s_type(instr.opcode, *funct3, rs1, rs2, imm);
-                            println!("{:032b}", binary);
+                            Some(encode_s_type(instr.opcode, *funct3, rs1, rs2, imm))
                         } else {
                             eprintln!("Invalid S-type operands: {:?}", tokens);
+                            None
                         }
                     } else {
                         eprintln!("Wrong number of operands for S-type: {:?}", tokens);
+                        None
                     }
                 }
 
@@ -462,12 +467,18 @@ pub fn asm_parser(contents: BufReader<File>) {
                         if let (Some(rs1), Some(rs2)) = (rs1, rs2) {
                             if let Some(&target_addr) = label_map.get(label) {
                                 let offset = target_addr as i32 - pc as i32;
-                                let binary = encode_b_type(instr.opcode, *funct3, rs1, rs2, offset);
-                                println!("{:032b}", binary);
+                                Some(encode_b_type(instr.opcode, *funct3, rs1, rs2, offset))
                             } else {
                                 eprintln!("Label '{}' not found", label);
+                                None
                             }
+                        } else {
+                            eprintln!("Invalid registers in B-type: {:?}", tokens);
+                            None
                         }
+                    } else {
+                        eprintln!("Wrong number of operands for B-type: {:?}", tokens);
+                        None
                     }
                 }
 
@@ -479,15 +490,17 @@ pub fn asm_parser(contents: BufReader<File>) {
                         if let (Some(rd), Ok(imm)) = (rd, imm) {
                             if imm > 0xFFFFF {
                                 eprintln!("Immediate too large for U-type: {}", imm);
+                                None
                             } else {
-                                let binary = encode_u_type(instr.opcode, rd, imm);
-                                println!("{:032b} // {}", binary, line);
+                                Some(encode_u_type(instr.opcode, rd, imm))
                             }
                         } else {
                             eprintln!("Invalid U-type operands: {:?}", tokens);
+                            None
                         }
                     } else {
                         eprintln!("U-type format: {} rd, imm", tokens[0]);
+                        None
                     }
                 }
 
@@ -495,31 +508,40 @@ pub fn asm_parser(contents: BufReader<File>) {
                     if tokens.len() == 3 {
                         let rd = reg_to_u8(&tokens[1]);
                         let label = &tokens[2];
-
                         if let Some(rd) = rd {
                             if let Some(&target_addr) = label_map.get(label) {
                                 let offset = target_addr as i32 - pc as i32;
-
                                 if offset % 2 != 0 {
                                     eprintln!("Unaligned offset for label '{}'", label);
+                                    None
                                 } else {
-                                    let binary = encode_j_type(instr.opcode, rd, offset);
-                                    println!("{:032b}", binary);
+                                    Some(encode_j_type(instr.opcode, rd, offset))
                                 }
                             } else {
                                 eprintln!("Unknown label '{}'", label);
+                                None
                             }
                         } else {
                             eprintln!("Invalid register '{}'", tokens[1]);
+                            None
                         }
                     } else {
                         eprintln!("J-type format should be: jal rd, label");
+                        None
                     }
                 }
+            };
 
+            if let Some(instr_bin) = encoded{
+                binary.extend(&instr_bin.to_le_bytes());
             }
         } else {
             println!("Unknown mnemonic: {}", mnemonic);
         }
     }
+
+    let mut file = File::create(&output_file_name).expect("Failed to create program.bin");
+    file.write_all(&binary).expect("Failed to write binary data");
+
+    println!("Saved output to {}", output_file_name);
 }
